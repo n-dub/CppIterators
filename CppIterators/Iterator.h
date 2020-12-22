@@ -74,22 +74,113 @@ namespace Iter
 		inline constexpr auto Zip(Iter2 other);
 
 		inline constexpr auto Enumerate();
+
+		inline constexpr auto StepBy(size_t n);
+
+		inline constexpr std::optional<typename Data::Type> Nth(size_t n) {
+			while (auto x = Next()) {
+				if (--n == 0)
+					return x;
+			}
+			return {};
+		}
+
+		template<class Iter2>
+		inline constexpr auto Chain(Iter2 other);
+
+		template<class OutputIt>
+		inline constexpr void Collect(OutputIt first) {
+			while (auto val = Next()) {
+				*first++ = val.value();
+			}
+		}
+
+		template<class Container>
+		inline constexpr Container Collect() {
+			Container c{};
+			Collect(std::back_inserter(c));
+			return c;
+		}
 	};
 
+	template<class It>
+	struct StepIterData
+	{
+		using Type = typename It::Type;
+		It iter;
+		size_t n, idx;
+
+		inline constexpr StepIterData(It iter, size_t n)
+			: iter(iter), n(n), idx(0) { }
+	};
+
+	template<class Iter>
+	inline constexpr auto StepBy(Iter it, size_t n) {
+		auto l = [](StepIterData<Iter>& d) -> std::optional<typename Iter::Type>
+		{
+			while (d.idx) {
+				d.idx = (d.idx + 1) % d.n;
+				if (!d.iter.Next())
+					break;
+			}
+			d.idx = (d.idx + 1) % d.n;
+			return d.iter.Next();
+		};
+		return Iterator(l, StepIterData<Iter>(it, n));
+	}
+
+	template<class Data, class FNext>
+	inline constexpr auto Iterator<Data, FNext>::StepBy(size_t n) {
+		return ::Iter::StepBy(*this, n);
+	}
+
 	template<class It1, class It2>
-	struct EnumIterData
+	struct ChainIterData
+	{
+		using Type = typename It1::Type;
+		It1 iter1;
+		It2 iter2;
+
+		inline constexpr ChainIterData(It1 iter1, It2 iter2)
+			: iter1(iter1), iter2(iter2) { }
+	};
+
+	template<class Iter1, class Iter2>
+	inline constexpr auto Chain(Iter1 it1, Iter2 it2) {
+		auto l = [](ChainIterData<Iter1, Iter2>& d) -> std::optional<typename Iter1::Type>
+		{
+			if (auto v = d.iter1.Next()) {
+				return v.value();
+			}
+			if (auto v = d.iter2.Next()) {
+				return v.value();
+			}
+
+			return {};
+		};
+		return Iterator(l, ChainIterData<Iter1, Iter2>(it1, it2));
+	}
+
+	template<class Data, class FNext>
+	template<class Iter2>
+	inline constexpr auto Iter::Iterator<Data, FNext>::Chain(Iter2 other) {
+		return ::Iter::Chain(*this, other);
+	}
+
+	template<class It1, class It2>
+	struct ZipIterData
 	{
 		using Type = std::tuple<typename It1::Type, typename It2::Type>;
 		It1 iter1;
 		It2 iter2;
 
-		inline constexpr EnumIterData(It1 iter1, It2 iter2)
+		inline constexpr ZipIterData(It1 iter1, It2 iter2)
 			: iter1(iter1), iter2(iter2) { }
 	};
 
 	template<class Iter1, class Iter2>
 	inline constexpr auto Zip(Iter1 it1, Iter2 it2) {
-		auto l = [](EnumIterData<Iter1, Iter2>& d) -> std::optional<std::tuple<typename Iter1::Type, typename Iter2::Type>>
+		auto l = [](ZipIterData<Iter1, Iter2>& d) -> std::optional<std::tuple<typename Iter1::Type, typename Iter2::Type>>
 		{
 			if (auto next1 = d.iter1.Next()) {
 				if (auto next2 = d.iter2.Next()) {
@@ -99,7 +190,7 @@ namespace Iter
 
 			return {};
 		};
-		return Iterator(l, EnumIterData<Iter1, Iter2>(it1, it2));
+		return Iterator(l, ZipIterData<Iter1, Iter2>(it1, it2));
 	}
 
 	template<class Data, class FNext>
@@ -121,9 +212,8 @@ namespace Iter
 
 	template<class Iter>
 	inline constexpr auto Take(Iter it, size_t n) {
-		auto l = [](TakeIterData<Iter>& d) -> std::optional<typename Iter::Type>
-		{
-			if (d.n-- == 0)
+		auto l = [](TakeIterData<Iter>& d) -> std::optional<typename Iter::Type> {
+			if (d.n-- <= 0)
 				return {};
 			return d.iter.Next();
 		};
@@ -150,8 +240,8 @@ namespace Iter
 	template<class It>
 	inline constexpr auto From(It begin, It end) {
 		return Iterator(
-			[](StdIterData<It, typename std::remove_reference<decltype(*begin)>::type>& d)
-				-> std::optional<typename std::remove_reference<decltype(*begin)>::type>
+			[](StdIterData<It, typename std::remove_reference<decltype(*begin)>::type>& d) ->
+				std::optional<typename std::remove_reference<decltype(*begin)>::type>
 			{
 				if (d.iter == d.end)
 					return {};
@@ -165,21 +255,55 @@ namespace Iter
 		return From(cont.begin(), cont.end());
 	}
 
+	template<class T, size_t N>
+	inline constexpr auto From(T(&arr)[N]) {
+		return From(arr, arr + N);
+	}
+
 	template<class T>
-	struct ArrIterData
+	struct OnceIterData
 	{
 		using Type = T;
-		T *iter, *end;
+		T element;
+		bool valid;
 
-		inline constexpr ArrIterData(T* b, T* e) {
-			iter = b;
-			end = e;
-		}
+		OnceIterData(T e) : element(e), valid(true) { }
 	};
 
-	template<class T, size_t N>
-	inline constexpr auto From(T (&arr)[N]) {
-		return From(arr, arr+N);
+	template<class T>
+	inline constexpr auto Once(T elem) {
+		return Iterator(
+			[](OnceIterData<T>& d) -> std::optional<T> {
+				if (d.valid) {
+					d.valid = false;
+					return d.element;
+				}
+				return {};
+			},
+			OnceIterData<T>(elem));
+	}
+
+	template<class T>
+	struct RepIterData
+	{
+		using Type = T;
+		T element;
+
+		RepIterData(T e) : element(e) { }
+	};
+
+	template<class T>
+	inline constexpr auto Repeat(T elem) {
+		return Iterator(
+			[](RepIterData<T>& d) -> std::optional<T> {
+				return d.element;
+			},
+			RepIterData<T>(elem));
+	}
+
+	template<class T>
+	inline constexpr auto Repeat(T elem, size_t n) {
+		return Repeat(elem).Take(n);
 	}
 
 	template<class T>
@@ -194,8 +318,6 @@ namespace Iter
 		}
 	};
 
-#pragma region ranges
-
 	template<class T>
 	inline constexpr auto Range(T begin, T end = std::numeric_limits<T>::max()) {
 		return Iterator(
@@ -206,6 +328,8 @@ namespace Iter
 			},
 			NumIterData<T>(begin, end));
 	}
+
+#pragma region ranges
 
 	template<>
 	inline auto From(int64_t begin, int64_t end) {
@@ -249,7 +373,7 @@ namespace Iter
 #pragma endregion
 
 	template<class Data, class FNext>
-	inline constexpr  auto Iterator<Data, FNext>::Enumerate() {
+	inline constexpr auto Iterator<Data, FNext>::Enumerate() {
 		return Range(size_t(0)).Zip(*this);
 	}
 }

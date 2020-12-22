@@ -1,11 +1,15 @@
-#include <vector>
+#include <list>
 #include <iostream>
+#include <vector>
 #include "Iterator.h"
 
-int main() {
-	std::vector a{ 10, 1, 2, 3, 45, 99 };
+template<class T1, class T2>
+std::ostream& operator<<(std::ostream& stream, std::tuple<T1, T2> tuple) {
+	return stream << "(" << std::get<0>(tuple) << ", " << std::get<1>(tuple) << ")";
+}
 
-	for (auto v : Iter::From(a)) {
-		std::cout << v << "\n";
+int main() {
+	for (auto x : Iter::Repeat("abc", 10)) {
+		std::cout << x << "\n";
 	}
 }
