@@ -88,6 +88,28 @@ namespace Iter
 		template<class Iter2>
 		inline constexpr auto Chain(Iter2 other);
 
+		template<class Func>
+		inline constexpr auto Fold(Type init, Func func) {
+			while (auto v = Next()) {
+				init = func(init, v.value());
+			}
+			return init;
+		}
+
+		template<class Func>
+		inline constexpr auto Fold(Func func) {
+			auto init = Next().value();
+			return Fold(init, func);
+		}
+
+		inline constexpr auto Sum() {
+			return Fold([](Type a, Type b) { return a + b; });
+		}
+
+		inline constexpr auto Product() {
+			return Fold([](Type a, Type b) { return a * b; });
+		}
+
 		template<class OutputIt>
 		inline constexpr void Collect(OutputIt first) {
 			while (auto val = Next()) {

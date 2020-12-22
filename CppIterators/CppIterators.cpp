@@ -3,13 +3,38 @@
 #include <vector>
 #include "Iterator.h"
 
-template<class T1, class T2>
-std::ostream& operator<<(std::ostream& stream, std::tuple<T1, T2> tuple) {
-	return stream << "(" << std::get<0>(tuple) << ", " << std::get<1>(tuple) << ")";
+template<class Tuple, size_t FI, size_t... I>
+void PrintTupleImpl(std::ostream& stream, Tuple& tuple, std::index_sequence<FI, I...> seq, bool first = false) {
+	if (first) {
+		stream << "(";
+	}
+	stream << std::get<FI>(tuple);
+	if constexpr (sizeof...(I) != 0) {
+		stream << ", ";
+		PrintTupleImpl(stream, tuple, std::index_sequence<I...>{});
+	}
+	else {
+		stream << ")";
+	}
+}
+
+template<class Tuple>
+void PrintTupleImpl(std::ostream& stream, Tuple&, std::index_sequence<>, bool) {
+	stream << "()";
+}
+
+template<class... Types>
+std::ostream& operator<<(std::ostream& stream, std::tuple<Types...>&& tuple) {
+	PrintTupleImpl(stream, tuple, std::index_sequence_for<Types...>{}, true);
+	return stream;
+}
+
+template<class... Types>
+std::ostream& operator<<(std::ostream& stream, std::tuple<Types...>& tuple) {
+	PrintTupleImpl(stream, tuple, std::index_sequence_for<Types...>{}, true);
+	return stream;
 }
 
 int main() {
-	for (auto x : Iter::Repeat("abc", 10)) {
-		std::cout << x << "\n";
-	}
+	std::cout << Iter::From(1, 6).Product();
 }
