@@ -35,5 +35,8 @@
     <ClInclude Include="Legacy.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="DDIterator.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

@@ -6,39 +6,45 @@ namespace Iter
 	/*
 	 * SDTrait must be:
 	 * struct {
-	 *     // type of the item
 	 *     using Type = ...;
-	 * 
+	 *
 	 *     // true if Count() works
 	 *     static inline constexpr bool FastCount = ...;
-	 * 
+	 *
 	 *     // return length of the iterator with O(1) complexity if possible
 	 *     size_t Count()             { ... }
-	 * 
+	 *
 	 *     // return front and move forward
 	 *     std::optional<Type> Next() { ... }
+	 * 
+	 * 	   // return back and move backwards
+	 *     std::optional<Type> NextBack() { ... }
 	 * };
 	*/
-	template<class SDTrait>
-	class SDIterator
+	template<class DDTrait>
+	class DDIterator
 	{
-		SDTrait m_trait;
+		DDTrait m_trait;
 	public:
-		using Type = typename SDTrait::Type;
-		static inline constexpr bool FastCount = SDTrait::FastCount;
+		using Type = typename DDTrait::Type;
+		static inline constexpr bool FastCount = DDTrait::FastCount;
 
-		inline constexpr SDIterator(SDTrait t) noexcept : m_trait(t) { }
+		constexpr inline DDIterator(DDTrait t) : m_trait(t) { }
 
 		inline constexpr std::optional<Type> Next() noexcept {
 			return m_trait.Next();
 		}
 
+		inline constexpr std::optional<Type> NextBack() noexcept {
+			return m_trait.NextBack();
+		}
+
 		inline auto begin() const noexcept {
-			return RangeForIter<SDIterator<SDTrait>>(*this);
+			return RangeForIter<DDIterator<DDTrait>>(*this);
 		}
 
 		inline auto end() const noexcept {
-			return RangeForIter<SDIterator<SDTrait>>(*this, false);
+			return RangeForIter<DDIterator<DDTrait>>(*this, false);
 		}
 
 		inline constexpr auto Skip(size_t n) const noexcept;
@@ -52,6 +58,8 @@ namespace Iter
 		inline constexpr auto Chain(Iter other) const noexcept;
 
 		inline constexpr auto Enumerate() const noexcept;
+
+		inline constexpr auto Reverse() const noexcept;
 
 		template<class Func, class Ret>
 		inline constexpr Ret Fold(Ret init, Func func) const noexcept {
@@ -73,7 +81,7 @@ namespace Iter
 		}
 
 		inline constexpr size_t Count() const noexcept {
-			if constexpr (SDTrait::FastCount) {
+			if constexpr (DDTrait::FastCount) {
 				return m_trait.Count();
 			}
 			return Fold(size_t(0),
@@ -107,14 +115,10 @@ namespace Iter
 		inline constexpr auto ToVector() const noexcept {
 			return Collect<std::vector<Type>>();
 		}
-
-		inline constexpr auto ToList() const noexcept {
-			return Collect<std::list<Type>>();
-		}
 	};
 
 	template<class T>
-	struct ForwardRangeIterTrait
+	struct DoubleDirRangeIterTrait
 	{
 		T begin, end;
 		using Type = T;
@@ -124,7 +128,7 @@ namespace Iter
 			return size_t(end) - size_t(begin);
 		}
 
-		constexpr inline ForwardRangeIterTrait(T b, T e)
+		constexpr inline DoubleDirRangeIterTrait(T b, T e)
 			: begin(b), end(e) { }
 
 		constexpr inline std::optional<T> Next() {
@@ -132,79 +136,91 @@ namespace Iter
 				return {};
 			return begin++;
 		}
+
+		constexpr inline std::optional<T> NextBack() {
+			if (begin == end)
+				return {};
+			return --end;
+		}
 	};
 
 	template<class T1, class T2>
-	constexpr inline auto FwdRange(T1 begin, T2 end) {
+	constexpr inline auto DDRange(T1 begin, T2 end) {
 		static_assert(std::is_convertible<T2, T1>::value);
 		static_assert(std::is_integral<T1>::value);
-		auto trait = ForwardRangeIterTrait<T1>{ begin, T1(end) };
-		return SDIterator(trait);
+		auto trait = DoubleDirRangeIterTrait<T1>{ begin, T1(end) };
+		return DDIterator(trait);
 	}
 
-	template<class SDTrait>
-	inline constexpr auto SDIterator<SDTrait>::Enumerate() const noexcept {
-		return FwdRange(size_t(0), size_t(-1)).Zip(*this);
+	template<class DDTrait>
+	inline constexpr auto DDIterator<DDTrait>::Enumerate() const noexcept {
+		return DDRange(size_t(0), size_t(-1)).Zip(*this);
 	}
 
-	template<class SDTrait>
-	inline constexpr std::optional<typename SDIterator<SDTrait>::Type> SDIterator<SDTrait>::Nth(size_t n) const noexcept {
+	template<class DDTrait>
+	inline constexpr std::optional<typename DDIterator<DDTrait>::Type> DDIterator<DDTrait>::Nth(size_t n) const noexcept {
 		auto it = this->Skip(n);
 		return it.Next();
 	}
 
 	template<class Iter>
-	inline constexpr auto SDSkipImpl(Iter it, size_t n) {
+	inline constexpr auto DDSkipImpl(Iter it, size_t n) {
 		while (n-- && it.Next());
 		return it;
 	}
 
-	template<class SDTrait>
-	inline constexpr auto SDIterator<SDTrait>::Skip(size_t n) const noexcept {
-		return SDSkipImpl(*this, n);
+	template<class DDTrait>
+	inline constexpr auto DDIterator<DDTrait>::Skip(size_t n) const noexcept {
+		return DDSkipImpl(*this, n);
 	}
 
 	template<class Iter>
-	struct SDTakeIterTrait
+	struct DDTakeIterTrait
 	{
 		Iter iter;
-		size_t n;
 		using Type = typename Iter::Type;
 		static inline constexpr bool FastCount = Iter::FastCount;
 
 		constexpr inline size_t Count() const noexcept {
 			if constexpr (FastCount) {
-				return std::min(n, iter.Count());
+				return iter.Count();
 			}
 			return 0;
 		}
 
-		constexpr inline SDTakeIterTrait(Iter i, size_t n) : iter(i), n(n) { }
+		// TODO: this is not very lazy
+		constexpr inline DDTakeIterTrait(Iter i, size_t n) : iter(i) {
+			size_t len = iter.Count();
+			if (len < n)
+				return;
+			size_t skipBack = len - n;
+			while (skipBack-- && iter.NextBack());
+		}
 
 		constexpr inline std::optional<Type> Next() {
-			if (n == 0)
-				return {};
-			--n;
 			return iter.Next();
+		}
+
+		constexpr inline std::optional<Type> NextBack() {
+			return iter.NextBack();
 		}
 	};
 
 	template<class Iter>
-	inline constexpr auto SDTakeImpl(Iter it, size_t n) {
-		return SDIterator(SDTakeIterTrait<Iter>{ it, n });
+	inline constexpr auto DDTakeImpl(Iter it, size_t n) {
+		return DDIterator(DDTakeIterTrait<Iter>{ it, n });
 	}
 
-	template<class SDTrait>
-	inline constexpr auto SDIterator<SDTrait>::Take(size_t n) const noexcept {
-		return SDTakeImpl(*this, n);
+	template<class DDTrait>
+	inline constexpr auto DDIterator<DDTrait>::Take(size_t n) const noexcept {
+		return DDTakeImpl(*this, n);
 	}
 
 	template<class Iter>
-	struct SDStepByIterTrait
+	struct DDStepByIterTrait
 	{
 		Iter iter;
 		size_t n;
-
 		using Type = typename Iter::Type;
 		static inline constexpr bool FastCount = Iter::FastCount;
 
@@ -216,30 +232,45 @@ namespace Iter
 			return 0;
 		}
 
-		constexpr inline SDStepByIterTrait(Iter i, size_t n) : iter(i), n(n) { }
+		constexpr inline DDStepByIterTrait(Iter i, size_t n) : iter(i), n(n) { }
 
 		constexpr inline auto Next() {
 			auto v = iter.Next();
-			iter = iter.Skip(n - 1);
+			Skip(n - 1);
 			return v;
+		}
+
+		constexpr inline auto NextBack() {
+			auto v = iter.NextBack();
+			SkipBack(n - 1);
+			return v;
+		}
+
+	private:
+		constexpr inline void Skip(size_t n) {
+			while (n-- && iter.Next());
+		}
+
+		constexpr inline void SkipBack(size_t n) {
+			while (n-- && iter.NextBack());
 		}
 	};
 
 	template<class Iter>
-	inline constexpr auto SDStepByImpl(Iter it, size_t n) {
-		return SDIterator(SDStepByIterTrait{ it, n });
+	inline constexpr auto DDStepByImpl(Iter it, size_t n) {
+		return DDIterator(DDStepByIterTrait{ it, n });
 	}
 
-	template<class SDTrait>
-	inline constexpr auto Iter::SDIterator<SDTrait>::StepBy(size_t n) const noexcept {
-		return SDStepByImpl(*this, n);
+	template<class DDTrait>
+	inline constexpr auto Iter::DDIterator<DDTrait>::StepBy(size_t n) const noexcept {
+		return DDStepByImpl(*this, n);
 	}
 
 	template<class T1, class T2>
-	struct SDZipIterTrait
+	struct DDZipIterTrait
 	{
-		SDIterator<T1> iter1;
-		SDIterator<T2> iter2;
+		DDIterator<T1> iter1;
+		DDIterator<T2> iter2;
 		using Type = std::tuple<typename T1::Type, typename T2::Type>;
 		static inline constexpr bool FastCount = T1::FastCount && T2::FastCount;
 
@@ -250,7 +281,7 @@ namespace Iter
 			return 0;
 		}
 
-		constexpr inline SDZipIterTrait(SDIterator<T1> l, SDIterator<T2> r) : iter1(l), iter2(r) { }
+		constexpr inline DDZipIterTrait(DDIterator<T1> l, DDIterator<T2> r) : iter1(l), iter2(r) { }
 
 		constexpr inline std::optional<Type> Next() {
 			if (auto next1 = iter1.Next()) {
@@ -261,25 +292,35 @@ namespace Iter
 
 			return {};
 		}
+
+		constexpr inline std::optional<Type> NextBack() {
+			if (auto next1 = iter1.NextBack()) {
+				if (auto next2 = iter2.NextBack()) {
+					return std::make_tuple(next1.value(), next2.value());
+				}
+			}
+
+			return {};
+		}
 	};
 
 	template<class T1, class T2>
-	inline constexpr auto SDZipImpl(SDIterator<T1> l, SDIterator<T2> r) {
-		return SDIterator(SDZipIterTrait{ l, r });
+	inline constexpr auto DDZipImpl(DDIterator<T1> l, DDIterator<T2> r) {
+		return DDIterator(DDZipIterTrait{ l, r });
 	}
 
-	template<class SDTrait>
+	template<class DDTrait>
 	template<class Iter>
-	inline constexpr auto SDIterator<SDTrait>::Zip(Iter other) const noexcept {
-		return SDZipImpl(*this, other);
+	inline constexpr auto DDIterator<DDTrait>::Zip(Iter other) const noexcept {
+		return DDZipImpl(*this, other);
 	}
 
 	template<class T1, class T2>
-	struct SDChainIterTrait
+	struct DDChainIterTrait
 	{
 		static_assert(std::is_same<typename T1::Type, typename T2::Type>::value, "Chained iterators must have same value type");
-		SDIterator<T1> iter1;
-		SDIterator<T2> iter2;
+		DDIterator<T1> iter1;
+		DDIterator<T2> iter2;
 		using Type = typename T1::Type;
 		static inline constexpr bool FastCount = T1::FastCount && T2::FastCount;
 
@@ -290,7 +331,7 @@ namespace Iter
 			return 0;
 		}
 
-		constexpr inline SDChainIterTrait(SDIterator<T1> l, SDIterator<T2> r) : iter1(l), iter2(r) { }
+		constexpr inline DDChainIterTrait(DDIterator<T1> l, DDIterator<T2> r) : iter1(l), iter2(r) { }
 
 		constexpr inline std::optional<Type> Next() {
 			if (auto next = iter1.Next()) {
@@ -303,23 +344,35 @@ namespace Iter
 
 			return {};
 		}
+
+		constexpr inline std::optional<Type> NextBack() {
+			if (auto next = iter2.NextBack()) {
+				return next.value();
+			}
+
+			if (auto next = iter1.NextBack()) {
+				return next.value();
+			}
+
+			return {};
+		}
 	};
 
 	template<class T1, class T2>
-	inline constexpr auto SDChainImpl(SDIterator<T1> l, SDIterator<T2> r) {
-		return SDIterator(SDChainIterTrait{ l, r });
+	inline constexpr auto DDChainImpl(DDIterator<T1> l, DDIterator<T2> r) {
+		return DDIterator(DDChainIterTrait{ l, r });
 	}
 
-	template<class SDTrait>
+	template<class DDTrait>
 	template<class Iter>
-	inline constexpr auto SDIterator<SDTrait>::Chain(Iter other) const noexcept {
-		return SDChainImpl(*this, other);
+	inline constexpr auto DDIterator<DDTrait>::Chain(Iter other) const noexcept {
+		return DDChainImpl(*this, other);
 	}
 
 	template<class T, class Func, class Ret>
-	struct SDMapIterTrait
+	struct DDMapIterTrait
 	{
-		SDIterator<T> iter;
+		DDIterator<T> iter;
 		Func func;
 		using Type = Ret;
 		static inline constexpr bool FastCount = T::FastCount;
@@ -331,7 +384,7 @@ namespace Iter
 			return 0;
 		}
 
-		constexpr inline SDMapIterTrait(SDIterator<T> it, Func f) : iter(it), func(f) { }
+		constexpr inline DDMapIterTrait(DDIterator<T> it, Func f) : iter(it), func(f) { }
 
 		constexpr inline std::optional<Ret> Next() {
 			if (auto next = iter.Next()) {
@@ -339,16 +392,59 @@ namespace Iter
 			}
 			return {};
 		}
+
+		constexpr inline std::optional<Ret> NextBack() {
+			if (auto next = iter.NextBack()) {
+				return func(next.value());
+			}
+			return {};
+		}
 	};
 
 	template<class T, class Func>
-	inline constexpr auto SDMapImpl(SDIterator<T> it, Func f) {
-		return SDIterator(SDMapIterTrait<T, Func, decltype(f(it.Next().value()))>{ it, f });
+	inline constexpr auto DDMapImpl(DDIterator<T> it, Func f) {
+		return DDIterator(DDMapIterTrait<T, Func, decltype(f(it.Next().value()))>{ it, f });
 	}
 
-	template<class SDTrait>
+	template<class DDTrait>
 	template<class Func>
-	inline constexpr auto SDIterator<SDTrait>::Map(Func func) const noexcept {
-		return SDMapImpl(*this, func);
+	inline constexpr auto DDIterator<DDTrait>::Map(Func func) const noexcept {
+		return DDMapImpl(*this, func);
+	}
+
+	template<class T>
+	struct DDRevIterTrait
+	{
+		using Type = typename DDIterator<T>::Type;
+		static inline constexpr bool FastCount = T::FastCount;
+
+		DDIterator<T> iter;
+
+		constexpr inline size_t Count() const noexcept {
+			if constexpr (FastCount) {
+				return iter.Count();
+			}
+			return 0;
+		}
+
+		constexpr inline DDRevIterTrait(DDIterator<T> it) : iter(it) { }
+
+		constexpr inline std::optional<Type> Next() {
+			return iter.NextBack();
+		}
+
+		constexpr inline std::optional<Type> NextBack() {
+			return iter.Next();
+		}
+	};
+
+	template<class T>
+	inline constexpr auto DDRevImpl(DDIterator<T> it) {
+		return DDIterator(DDRevIterTrait{ it });
+	}
+
+	template<class DDTrait>
+	inline constexpr auto Iter::DDIterator<DDTrait>::Reverse() const noexcept {
+		return DDRevImpl(*this);
 	}
 }

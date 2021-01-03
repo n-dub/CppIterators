@@ -143,6 +143,7 @@
     <ClCompile Include="CppIterators.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="DDIterator.h" />
     <ClInclude Include="Iterator.h" />
     <ClInclude Include="Legacy.h" />
     <ClInclude Include="IteratorCommon.h" />

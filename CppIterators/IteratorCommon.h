@@ -3,9 +3,17 @@
 #include <tuple>
 #include <limits>
 #include <stdint.h>
+#include <forward_list>
+#include <list>
+#include <vector>
 
 namespace Iter
 {
+	template<class... Params>
+	constexpr auto DummyVoid = [](Params...) { };
+	template<class R, R ret, class... Params>
+	constexpr auto DummyFunc = [](Params...) -> R { return ret; };
+
 	template<class T>
 	class Ref
 	{
