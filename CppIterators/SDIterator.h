@@ -51,7 +51,7 @@ namespace Iter
 		template<class Iter>
 		inline constexpr auto Chain(Iter other) const noexcept;
 
-		inline constexpr auto Enumerate() const noexcept;
+		inline constexpr auto Enumerate(size_t start = 0) const noexcept;
 
 		template<class Func, class Ret>
 		inline constexpr Ret Fold(Ret init, Func func) const noexcept {
@@ -143,8 +143,8 @@ namespace Iter
 	}
 
 	template<class SDTrait>
-	inline constexpr auto SDIterator<SDTrait>::Enumerate() const noexcept {
-		return FwdRange(size_t(0), size_t(-1)).Zip(*this);
+	inline constexpr auto SDIterator<SDTrait>::Enumerate(size_t start) const noexcept {
+		return FwdRange(start, size_t(-1)).Zip(*this);
 	}
 
 	template<class SDTrait>
