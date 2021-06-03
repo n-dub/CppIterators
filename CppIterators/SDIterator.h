@@ -94,6 +94,9 @@ namespace Iter
 		template<class Func>
 		inline constexpr auto Map(Func func) const noexcept;
 
+		template<class Func>
+		inline constexpr auto Filter(Func func) const noexcept;
+
 		template<class Cont>
 		inline constexpr auto Collect() const noexcept {
 			auto it = *this;
@@ -350,5 +353,43 @@ namespace Iter
 	template<class Func>
 	inline constexpr auto SDIterator<SDTrait>::Map(Func func) const noexcept {
 		return SDMapImpl(*this, func);
+	}
+
+	template<class T, class Func>
+	struct SDFilterIterTrait
+	{
+		SDIterator<T> iter;
+		Func func;
+		using Type = typename T::Type;
+		static inline constexpr bool FastCount = T::FastCount;
+
+		constexpr inline size_t Count() const noexcept {
+			if constexpr (FastCount) {
+				return iter.Count();
+			}
+			return 0;
+		}
+
+		constexpr inline SDFilterIterTrait(SDIterator<T> it, Func f) : iter(it), func(f) { }
+
+		constexpr inline std::optional<Type> Next() {
+			while (auto next = iter.Next()) {
+				if (!func(next.value()))
+					continue;
+				return next.value();
+			}
+			return {};
+		}
+	};
+
+	template<class T, class Func>
+	inline constexpr auto SDFilterImpl(SDIterator<T> it, Func f) {
+		return SDIterator(SDFilterIterTrait<T, Func>{ it, f });
+	}
+
+	template<class SDTrait>
+	template<class Func>
+	inline constexpr auto SDIterator<SDTrait>::Filter(Func func) const noexcept {
+		return SDFilterImpl(*this, func);
 	}
 }

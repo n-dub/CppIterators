@@ -59,7 +59,17 @@ int main() {
 	}
 
 	std::cout << "\n\nReverse range [0; 10):\n";
-	for (auto v : Iter::FwdRange(0, 10).Reverse()) {
+	for (auto v : Iter::DDRange(0, 10).Reverse()) {
+		std::cout << v << " ";
+	}
+
+	std::cout << "\n\nFwdRange [0; 10) where all are even:\n";
+	for (auto v : Iter::FwdRange(0, 10).Filter([](auto x) { return x % 2 == 0; })) {
+		std::cout << v << " ";
+	}
+
+	std::cout << "\n\nDDRange [0; 10) where all are even:\n";
+	for (auto v : Iter::DDRange(0, 10).Filter([](auto x) { return x % 2 == 0; })) {
 		std::cout << v << " ";
 	}
 

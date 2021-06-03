@@ -102,6 +102,9 @@ namespace Iter
 		template<class Func>
 		inline constexpr auto Map(Func func) const noexcept;
 
+		template<class Func>
+		inline constexpr auto Filter(Func func) const noexcept;
+
 		template<class Cont>
 		inline constexpr auto Collect() const noexcept {
 			auto it = *this;
@@ -410,6 +413,53 @@ namespace Iter
 	template<class Func>
 	inline constexpr auto DDIterator<DDTrait>::Map(Func func) const noexcept {
 		return DDMapImpl(*this, func);
+	}
+
+	template<class T, class Func>
+	struct DDFilterIterTrait
+	{
+		DDIterator<T> iter;
+		Func func;
+		using Type = typename T::Type;
+		static inline constexpr bool FastCount = T::FastCount;
+
+		constexpr inline size_t Count() const noexcept {
+			if constexpr (FastCount) {
+				return iter.Count();
+			}
+			return 0;
+		}
+
+		constexpr inline DDFilterIterTrait(DDIterator<T> it, Func f) : iter(it), func(f) { }
+
+		constexpr inline std::optional<Type> Next() {
+			while (auto next = iter.Next()) {
+				if (!func(next.value()))
+					continue;
+				return next.value();
+			}
+			return {};
+		}
+
+		constexpr inline std::optional<Type> NextBack() {
+			while (auto next = iter.NextBack()) {
+				if (!func(next.value()))
+					continue;
+				return next.value();
+			}
+			return {};
+		}
+	};
+
+	template<class T, class Func>
+	inline constexpr auto DDFilterImpl(DDIterator<T> it, Func f) {
+		return DDIterator(DDFilterIterTrait<T, Func>{ it, f });
+	}
+
+	template<class DDTrait>
+	template<class Func>
+	inline constexpr auto DDIterator<DDTrait>::Filter(Func func) const noexcept {
+		return DDFilterImpl(*this, func);
 	}
 
 	template<class T>
